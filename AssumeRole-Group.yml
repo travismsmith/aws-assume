@@ -1,0 +1,16 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources: 
+  AssumeRoleAdminGroup: 
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: AssumedAdministrator
+      Path: /
+      Policies:
+        - PolicyName: AssumeRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/AssumeRole-Administrator"
