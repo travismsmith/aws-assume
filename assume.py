@@ -6,61 +6,85 @@ from os.path import expanduser
 import boto3
 import requests
 
-parser = argparse.ArgumentParser()
-group = parser.add_mutually_exclusive_group()
-group.add_argument('-v', '--verbose', action='store_true')
-group.add_argument('-q', '--quiet', action='store_true')
-parser.add_argument('-a', '--role', default='AssumeRole-Administrator')
-parser.add_argument('-c', '--config', default=(expanduser("~") + '/.aws/'),
-                    help='location of configuration files (Default: ~/.aws/')
-parser.add_argument('-d', '--default', default='root',
-                    help='Select a profile for initial login to STS')
-parser.add_argument('-p', '--profile', default='default',
-                    help='profile to save credentials (Default: default)')
-parser.add_argument('-r', '--region', default='us-east-1',
-                    help='STS region to connct to (Default: us-east-1')
-parser.add_argument('-t', '--timeout', default='3600', type=int,
-                    choices=range(900, 3601), metavar="[900-3600]",
-                    help='credential/url timeout in seconds (Default: 3600)')
-args = parser.parse_args()
 
-
-def get_account_role(path, role_name):
-    with open(path + 'accounts') as f:
-        account_list = f.read().splitlines()
-    for i in range(len(account_list)):
-        print('  ' + str(i) + ": " + account_list[i])
-    selection = input("Select account: ")
-    role_arn = 'arn:aws:iam::{}:role/{}'.format(
-        account_list[int(selection)],
-        role_name
+# parse arguments
+def parse_all_args():
+    parser = argparse.ArgumentParser()
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        '-v', '--verbose',
+        action='store_true'
     )
-    return role_arn
+    group.add_argument(
+        '-q', '--quiet',
+        action='store_true'
+    )
+    parser.add_argument(
+        '-a', '--assume',
+        default='assume'
+    )
+    parser.add_argument(
+        '-c', '--config',
+        default=(expanduser("~") + '/.aws/credentials'),
+        help='location of configuration files (Default: ~/.aws/credentials'
+    )
+    parser.add_argument(
+        '-d', '--dest',
+        default='default',
+        help='profile to save credentials (Default: default)'
+    )
+    parser.add_argument(
+        '-l', '--login',
+        default='root',
+        help='Select a profile for initial login to STS'
+    )
+    parser.add_argument(
+        '-r', '--region',
+        default='us-east-1',
+        help='STS region to connct to (Default: us-east-1'
+    )
+    parser.add_argument(
+        '-t', '--timeout',
+        default='3600', type=int,
+        choices=range(900, 3601), metavar="[900-3600]",
+        help='credential/url timeout in seconds (Default: 3600)'
+    )
+    parser.add_argument('token')
+    return parser.parse_args()
 
 
-def get_credentials(client, timeout, role_arn, user_arn, token):
-    response = client.assume_role(
+# verify that required roles exist in config file
+def verify_roles(config, login_profile, assume_profile):
+    if config.has_section(login_profile):
+        if config.has_section(assume_profile):
+            if config.has_option(assume_profile, 'role_arn'):
+                return True
+            else:
+                raise NameError('profile missing role_arn: ' + assume_profile)
+        else:
+            raise NameError('profile missing: ' + assume_profile)
+    else:
+        raise NameError('profile missing: ' + login_profile)
+
+
+# use sts to retrieve temporary credentials
+def get_credentials(login_profile, region, timeout, role_arn, token):
+    sts = boto3.session.Session(
+        profile_name=login_profile,
+        region_name=region
+    ).client('sts')
+    user_arn = sts.get_caller_identity()['Arn']
+    response = sts.assume_role(
         RoleArn=role_arn,
         RoleSessionName=user_arn.split("/")[1],
         DurationSeconds=timeout,
         SerialNumber=user_arn.replace(':user/', ':mfa/'),
         TokenCode=token
     )
-    creds = response['Credentials']
-    return creds
+    return response['Credentials']
 
 
-def set_config(profile_name, path, creds):
-    config = configparser.RawConfigParser()
-    config.read(path+'credentials')
-    config[profile_name] = {}
-    config[profile_name]['aws_access_key_id'] = creds['AccessKeyId']
-    config[profile_name]['aws_secret_access_key'] = creds['SecretAccessKey']
-    config[profile_name]['aws_session_token'] = creds['SessionToken']
-    with open(path + 'credentials', 'w') as configfile:
-        config.write(configfile)
-
-
+# get the temporary console url
 def get_url(credentials):
     federation_url = 'https://signin.aws.amazon.com/federation'
     destination_url = 'https://console.aws.amazon.com/'
@@ -88,21 +112,25 @@ def get_url(credentials):
     )
 
 
-session = boto3.session.Session(
-    profile_name=args.default,
-    region_name=args.region
-)
-sts = session.client('sts')
-user = sts.get_caller_identity()['Arn']
-role = get_account_role(args.config, args.role)
-token = input("MFA Token: ")
-creds = get_credentials(sts, args.timeout, role, user, token)
-set_config(args.profile, args.config, creds)
+args = parse_all_args()
+c_file = configparser.ConfigParser()
+c_file.read(args.config)
+if verify_roles(c_file, args.login, args.assume):
+    role = c_file.get(args.assume, 'role_arn')
+    creds = get_credentials(args.login, args.region, args.timeout, role, args.token)
 
-if not args.quiet:
-    print('\nSaved to profile: ' + args.profile)
-    if args.verbose:
-        print('Role Assumed: ' + role)
-        print('Access Key: ' + creds['AccessKeyId'])
-        print('Expiration Date: ' + creds['Expiration'])
-    print('\nConsole URL: ' + get_url(creds))
+    c_file[args.dest] = {}
+    c_file[args.dest]['aws_access_key_id'] = creds['AccessKeyId']
+    c_file[args.dest]['aws_secret_access_key'] = creds['SecretAccessKey']
+    c_file[args.dest]['aws_session_token'] = creds['SessionToken']
+    with open(args.config, 'w') as configfile:
+        c_file.write(configfile)
+    url = get_url(creds)
+
+    if not args.quiet:
+        print('Saved to profile: ' + args.dest)
+        if args.verbose:
+            print('Role Assumed: ' + role)
+            print('Access Key: ' + creds['AccessKeyId'])
+            print('Expiration Date: ' + str(creds['Expiration']))
+        print('Console URL: ' + url)
