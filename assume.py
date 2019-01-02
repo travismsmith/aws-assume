@@ -1,7 +1,7 @@
-import argparse
-import configparser
-import urllib
+from argparse import ArgumentParser
+from configparser import ConfigParser
 from os.path import expanduser
+from urllib.parse import quote_plus
 
 import boto3
 import requests
@@ -9,7 +9,7 @@ import requests
 
 # parse arguments
 def parse_all_args():
-    parser = argparse.ArgumentParser()
+    parser = ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         '-v', '--verbose',
@@ -92,7 +92,7 @@ def get_url(credentials):
 
     # Generate a console URL
     # https://aws.amazon.com/blogs/security/how-to-enable-cross-account-access-to-the-aws-management-console/
-    json_credentials = urllib.parse.quote_plus(
+    json_credentials = quote_plus(
         creds.format(
             credentials['AccessKeyId'],
             credentials['SecretAccessKey'],
@@ -107,17 +107,18 @@ def get_url(credentials):
 
     return '{}?Action=login&Issuer=&Destination={}&SigninToken={}'.format(
         federation_url,
-        urllib.parse.quote_plus(destination_url),
+        quote_plus(destination_url),
         r.json()['SigninToken']
     )
 
 
 args = parse_all_args()
-c_file = configparser.ConfigParser()
+c_file = ConfigParser()
 c_file.read(args.config)
 if verify_roles(c_file, args.login, args.assume):
     role = c_file.get(args.assume, 'role_arn')
-    creds = get_credentials(args.login, args.region, args.timeout, role, args.token)
+    creds = get_credentials(args.login, args.region,
+                            args.timeout, role, args.token)
 
     c_file[args.dest] = {}
     c_file[args.dest]['aws_access_key_id'] = creds['AccessKeyId']
@@ -125,6 +126,7 @@ if verify_roles(c_file, args.login, args.assume):
     c_file[args.dest]['aws_session_token'] = creds['SessionToken']
     with open(args.config, 'w') as configfile:
         c_file.write(configfile)
+
     url = get_url(creds)
 
     if not args.quiet:
