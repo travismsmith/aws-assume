@@ -13,20 +13,23 @@ def parse_all_args():
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         '-v', '--verbose',
-        action='store_true'
+        action='store_true',
+        help='show details of connection'
     )
     group.add_argument(
         '-q', '--quiet',
-        action='store_true'
+        action='store_true',
+        help='hide all output'
     )
     parser.add_argument(
         '-a', '--assume',
-        default='assume'
+        default='assume',
+        help='role to assume (Default: assume)'
     )
     parser.add_argument(
         '-c', '--config',
         default=(expanduser("~") + '/.aws/credentials'),
-        help='location of configuration files (Default: ~/.aws/credentials'
+        help='location of configuration files (Default: ~/.aws/credentials)'
     )
     parser.add_argument(
         '-d', '--dest',
@@ -36,12 +39,12 @@ def parse_all_args():
     parser.add_argument(
         '-l', '--login',
         default='root',
-        help='Select a profile for initial login to STS'
+        help='profile to connect to STS (Default: root)'
     )
     parser.add_argument(
         '-r', '--region',
         default='us-east-1',
-        help='STS region to connct to (Default: us-east-1'
+        help='STS region to connct to (Default: us-east-1)'
     )
     parser.add_argument(
         '-t', '--timeout',
