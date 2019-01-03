@@ -123,6 +123,7 @@ if verify_roles(c_file, args.login, args.assume):
     creds = get_credentials(args.login, args.region,
                             args.timeout, role, args.token)
 
+    # write configuration to credentials file
     c_file[args.dest] = {}
     c_file[args.dest]['aws_access_key_id'] = creds['AccessKeyId']
     c_file[args.dest]['aws_secret_access_key'] = creds['SecretAccessKey']
@@ -130,12 +131,11 @@ if verify_roles(c_file, args.login, args.assume):
     with open(args.config, 'w') as configfile:
         c_file.write(configfile)
 
-    url = get_url(creds)
-
     if not args.quiet:
         print('Saved to profile: ' + args.dest)
         if args.verbose:
             print('Role Assumed: ' + role)
             print('Access Key: ' + creds['AccessKeyId'])
             print('Expiration Date: ' + str(creds['Expiration']))
+        url = get_url(creds)
         print('Console URL: ' + url)
