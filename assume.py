@@ -49,7 +49,7 @@ def parse_all_args():
     parser.add_argument(
         '-t', '--timeout',
         default='3600', type=int,
-        choices=range(900, 3601), metavar="[900-3600]",
+        choices=range(900, 43200), metavar="[900-43200]",
         help='credential/url timeout in seconds (Default: 3600)'
     )
     parser.add_argument('token')
