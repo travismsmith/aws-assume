@@ -27,9 +27,14 @@ def parse_all_args():
         help='role to assume (Default: assume)'
     )
     parser.add_argument(
-        '-c', '--config',
+        '-C', '--config',
+        default=(expanduser("~") + '/.aws/config'),
+        help='location of configuration files (Default: ~/.aws/config)'
+    )
+    parser.add_argument(
+        '-c', '--credentials',
         default=(expanduser("~") + '/.aws/credentials'),
-        help='location of configuration files (Default: ~/.aws/credentials)'
+        help='location of configuration files (Default: ~/.aws/config)'
     )
     parser.add_argument(
         '-d', '--dest',
@@ -57,8 +62,8 @@ def parse_all_args():
 
 
 # verify that required roles exist in config file
-def verify_roles(config, login_profile, assume_profile):
-    if config.has_section(login_profile):
+def verify_roles(config, credentials, login_profile, assume_profile):
+    if credentials.has_section(login_profile):
         if config.has_section(assume_profile):
             if config.has_option(assume_profile, 'role_arn'):
                 return True
@@ -116,20 +121,23 @@ def get_url(credentials):
 
 
 args = parse_all_args()
-c_file = ConfigParser()
-c_file.read(args.config)
-if verify_roles(c_file, args.login, args.assume):
-    role = c_file.get(args.assume, 'role_arn')
+config_file = ConfigParser()
+config_file.read(args.config)
+credentials_file = ConfigParser()
+credentials_file.read(args.credentials)
+config_section_name = 'profile {0}'.format(args.assume)
+if verify_roles(config_file, credentials_file, args.login, config_section_name):
+    role = config_file.get(config_section_name, 'role_arn')
     creds = get_credentials(args.login, args.region,
                             args.timeout, role, args.token)
 
     # write configuration to credentials file
-    c_file[args.dest] = {}
-    c_file[args.dest]['aws_access_key_id'] = creds['AccessKeyId']
-    c_file[args.dest]['aws_secret_access_key'] = creds['SecretAccessKey']
-    c_file[args.dest]['aws_session_token'] = creds['SessionToken']
-    with open(args.config, 'w') as configfile:
-        c_file.write(configfile)
+    credentials_file[args.dest] = {}
+    credentials_file[args.dest]['aws_access_key_id'] = creds['AccessKeyId']
+    credentials_file[args.dest]['aws_secret_access_key'] = creds['SecretAccessKey']
+    credentials_file[args.dest]['aws_session_token'] = creds['SessionToken']
+    with open(args.credentials, 'w') as configfile:
+        credentials_file.write(configfile)
 
     if not args.quiet:
         print('Saved to profile: ' + args.dest)
